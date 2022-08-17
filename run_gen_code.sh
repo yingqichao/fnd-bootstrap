@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=4 python ./UAMFD_store_pretrain_features.py -train_dataset gossip -test_dataset gossip -batch_size 1 -epochs 5
