@@ -28,7 +28,7 @@ class FakeNet_dataset(data.Dataset):
                  is_filter=True, is_use_unimodal=True, image_size=224, is_train=True,
                  data_augment=False, with_ambiguity=False, use_soft_label=False,is_sample_positive=1,
                  duplicate_fake_times=0,
-                 not_on_12=0
+                 not_on_12=0, downsample_rate=0.5
                  ):
         not_on_12 = not_on_12 > 0
         print(f"not on 12? {not_on_12}")
@@ -201,7 +201,7 @@ class FakeNet_dataset(data.Dataset):
                 img_GT = torch.from_numpy(np.ascontiguousarray(np.transpose(img_GT, (2, 0, 1)))).float()
 
                 if H_origin<100 or W_origin<100 or H_origin/W_origin<0.33 or H_origin/W_origin>3:#'text' in category:
-                    print(f"Unimodal text detected {H_origin} {W_origin}. Set as zero matrix")
+                    # print(f"Unimodal text detected {H_origin} {W_origin}. Set as zero matrix")
                     img_GT = torch.zeros_like(img_GT)
                 elif 'image' in category:
                     # print("Unimodal image detected. Set as \"No image provided for this news\"")

@@ -24,6 +24,7 @@ from sklearn import metrics
 from sklearn.preprocessing import label_binarize
 import scipy.io as sio
 from timm.models.vision_transformer import Block
+import antialiased_cnns
 
 class SimpleGate(nn.Module):
     def forward(self,x):

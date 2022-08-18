@@ -16,7 +16,7 @@ import antialiased_cnns
 
 import numpy as np
 class GoogLeNet(nn.Module):
-    def __init__(self, aux_logits=False, num_classes=1000, use_SRM=False):
+    def __init__(self, aux_logits=False, num_classes=1000, use_SRM=False, antialias=True):
         super(GoogLeNet, self).__init__()
         assert aux_logits == True or aux_logits == False
         self.aux_logits = aux_logits
@@ -25,6 +25,7 @@ class GoogLeNet(nn.Module):
         # make everything as compact as possible, kernel_size=3 instead of (3,3)
         image_channels = 3
         if  self.use_SRM:
+            print("We are using SRM in Inception")
             ## bayar conv
             self.BayarConv2D = nn.Conv2d(3, 3, 5, 1, padding=2, bias=False)
             self.bayar_mask = (torch.tensor(np.ones(shape=(5, 5)))).cuda()
@@ -52,6 +53,7 @@ class GoogLeNet(nn.Module):
             padding=(3, 3),
         )
 
+        print("We are using antialias in Inception")
         # self.maxpool1 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.maxpool1 = nn.Sequential(
             nn.MaxPool2d(kernel_size=3, stride=1, padding=1),
