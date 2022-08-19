@@ -31,10 +31,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau, MultiStepLR
 import pytorch_warmup as warmup
 from loss.focal_loss import focal_loss
 
-'''
-Unimodal-assisted Multimodal fake news detection
-Qichao Ying 2022.5.1
-'''
+
 GT_size = 224
 word_token_length = 197  # identical to size of MAE
 image_token_length = 197

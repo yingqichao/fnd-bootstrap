@@ -91,7 +91,7 @@ class weibo_dataset(data.Dataset):
     ])
         if '21' in self.root_path:
             print("We are using Weibo 21.")
-        wb = openpyxl.load_workbook(f"{self.root_path}/{'train' if is_train else 'test'}_datasets{'_Weibo21' if '21' in self.root_path else ''}.xlsx")
+        wb = openpyxl.load_workbook(f"{self.root_path}/{'train' if is_train else 'test'}_datasets{'_Weibo21' if '21' in self.root_path else '_WWW'}.xlsx")
 
         sheetnames = wb.sheetnames
         sheet = wb[sheetnames[0]]

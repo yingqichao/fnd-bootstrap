@@ -1,4 +1,4 @@
-from positional_encodings import PositionalEncoding1D, PositionalEncoding2D, PositionalEncodingPermute3D
+from positional_encodings.torch_encodings import PositionalEncoding1D, PositionalEncoding2D, PositionalEncodingPermute3D
 import copy
 import pickle as pickle
 from random import sample
@@ -24,12 +24,17 @@ from sklearn import metrics
 from sklearn.preprocessing import label_binarize
 import scipy.io as sio
 from timm.models.vision_transformer import Block
-import antialiased_cnns
+
 
 class SimpleGate(nn.Module):
-    def forward(self,x):
-        x1,x2 = x.chunk(2,dim=1)
-        return x1*x2
+    def __init__(self, dim=1):
+        super(SimpleGate, self).__init__()
+        self.dim = dim
+
+    def forward(self, x):
+        x1, x2 = x.chunk(2, dim=self.dim)
+        return x1 * x2
+
 
 class TokenAttention(torch.nn.Module):
     """
@@ -38,12 +43,19 @@ class TokenAttention(torch.nn.Module):
 
     def __init__(self, input_shape):
         super(TokenAttention, self).__init__()
-        self.attention_layer = torch.nn.Linear(input_shape, 1)
+        self.attention_layer = nn.Sequential(
+            torch.nn.Linear(input_shape, input_shape),
+            SimpleGate(dim=2),
+            torch.nn.Linear(int(input_shape / 2), 1),
+        )
 
     def forward(self, inputs):
         scores = self.attention_layer(inputs).view(-1, inputs.size(1))
-        scores = torch.softmax(scores, dim=-1).unsqueeze(1)
+        # scores = torch.softmax(scores, dim=-1).unsqueeze(1)
+        scores = scores.unsqueeze(1)
         outputs = torch.matmul(scores, inputs).squeeze(1)
+        # scores = self.attention_layer(inputs)
+        # outputs = scores*inputs
         return outputs, scores
 
 
@@ -65,11 +77,11 @@ class UAMFD_Net(nn.Module):
         self.is_use_bce = is_use_bce
         out_dim = 1 if self.is_use_bce else 2
         self.num_expert = 3  # 2
-        self.depth = 2  # 2
+        self.depth = 1  # 2
         super(UAMFD_Net, self).__init__()
         # IMAGE: MAE
         # if self.dataset in self.LOW_BATCH_SIZE_AND_LR:
-        #     self.image_model = Block(dim=self.unified_dim, num_heads=16)
+        #     self.image_model = Block(dim=self.unified_dim, num_heads=8)
         # else:
         self.image_model = models_mae.__dict__["mae_vit_{}_patch16".format(self.model_size)](norm_pix_loss=False)
         checkpoint = torch.load('./mae_pretrain_vit_{}.pth'.format(self.model_size), map_location='cpu')
@@ -80,7 +92,7 @@ class UAMFD_Net(nn.Module):
         # image_model_finetune = []
         # self.finetune_depth = 1
         # for j in range(self.finetune_depth):
-        #     image_model_finetune.append(Block(dim=self.unified_dim, num_heads=16))  # note: need to output model[:,0]
+        #     image_model_finetune.append(Block(dim=self.unified_dim, num_heads=8))  # note: need to output model[:,0]
         # self.image_model_finetune = nn.ModuleList(image_model_finetune)
 
         # TEXT: BERT OR PRETRAINED FROM WWW
@@ -88,14 +100,14 @@ class UAMFD_Net(nn.Module):
         model_name = 'bert-base-chinese' if self.dataset not in english_lists else 'bert-base-uncased'
         print("BERT: using {}".format(model_name))
         # if self.dataset in self.LOW_BATCH_SIZE_AND_LR:
-        #     self.text_model = Block(dim=self.unified_dim, num_heads=16)
+        #     self.text_model = Block(dim=self.unified_dim, num_heads=8)
         # else:
         self.text_model = BertModel.from_pretrained(model_name)
         # for param in self.text_model.parameters():
         #     param.requires_grad = False
         # text_model_finetune = []
         # for j in range(self.finetune_depth):
-        #     text_model_finetune.append(Block(dim=self.unified_dim, num_heads=16))  # note: need to output model[:,0]
+        #     text_model_finetune.append(Block(dim=self.unified_dim, num_heads=8))  # note: need to output model[:,0]
         # self.text_model_finetune = nn.ModuleList(text_model_finetune)
 
         self.text_attention = TokenAttention(self.unified_dim)
@@ -121,7 +133,7 @@ class UAMFD_Net(nn.Module):
         for i in range(self.num_expert):
             image_expert = []
             for j in range(self.depth):
-                image_expert.append(Block(dim=self.unified_dim, num_heads=16))  # note: need to output model[:,0]
+                image_expert.append(Block(dim=self.unified_dim, num_heads=8))  # note: need to output model[:,0]
 
             image_expert = nn.ModuleList(image_expert)
             image_expert_list.append(image_expert)
@@ -130,8 +142,8 @@ class UAMFD_Net(nn.Module):
             text_expert = []
             mm_expert = []
             for j in range(self.depth):
-                text_expert.append(Block(dim=self.unified_dim, num_heads=16))
-                mm_expert.append(Block(dim=self.unified_dim, num_heads=16))
+                text_expert.append(Block(dim=self.unified_dim, num_heads=8))
+                mm_expert.append(Block(dim=self.unified_dim, num_heads=8))
 
             text_expert = nn.ModuleList(text_expert)
             text_expert_list.append(text_expert)
@@ -143,9 +155,9 @@ class UAMFD_Net(nn.Module):
         self.mm_experts = nn.ModuleList(mm_expert_list)
         # self.out_unified_dim = 320
         self.image_gate_mae = nn.Sequential(nn.Linear(self.unified_dim, self.unified_dim),
-                                            nn.ELU(inplace=True),
-                                            nn.BatchNorm1d(self.unified_dim),
-                                            nn.Linear(self.unified_dim, self.num_expert),
+                                            SimpleGate(),
+                                            nn.BatchNorm1d(int(self.unified_dim / 2)),
+                                            nn.Linear(int(self.unified_dim / 2), self.num_expert),
                                             # nn.Dropout(0.1),
                                             # nn.Softmax(dim=1)
                                             )
@@ -158,35 +170,35 @@ class UAMFD_Net(nn.Module):
         #                                 )
 
         self.text_gate = nn.Sequential(nn.Linear(self.unified_dim, self.unified_dim),
-                                       nn.ELU(inplace=True),
-                                       nn.BatchNorm1d(self.unified_dim),
-                                       nn.Linear(self.unified_dim, self.num_expert),
+                                       SimpleGate(),
+                                       nn.BatchNorm1d(int(self.unified_dim / 2)),
+                                       nn.Linear(int(self.unified_dim / 2), self.num_expert),
                                        # nn.Dropout(0.1),
                                        # nn.Softmax(dim=1)
                                        )
         self.mm_gate = nn.Sequential(nn.Linear(self.unified_dim, self.unified_dim),
-                                     nn.ELU(inplace=True),
-                                     nn.BatchNorm1d(self.unified_dim),
-                                     nn.Linear(self.unified_dim, self.num_expert),
+                                     SimpleGate(),
+                                     nn.BatchNorm1d(int(self.unified_dim / 2)),
+                                     nn.Linear(int(self.unified_dim / 2), self.num_expert),
                                      # nn.Dropout(0.1),
                                      # nn.Softmax(dim=1)
                                      )
 
-        self.image_gate_mae_1 = nn.Sequential(nn.Linear(self.unified_dim, self.unified_dim),
-                                              nn.ELU(inplace=True),
-                                              nn.BatchNorm1d(self.unified_dim),
-                                              nn.Linear(self.unified_dim, self.num_expert),
-                                              # nn.Dropout(0.1),
-                                              # nn.Softmax(dim=1)
-                                              )
+        # self.image_gate_mae_1 = nn.Sequential(nn.Linear(self.unified_dim, self.unified_dim),
+        #                                       SimpleGate(),
+        #                                       nn.BatchNorm1d(int(self.unified_dim/2)),
+        #                                       nn.Linear(int(self.unified_dim/2), self.num_expert),
+        #                                       # nn.Dropout(0.1),
+        #                                       # nn.Softmax(dim=1)
+        #                                       )
 
-        self.text_gate_1 = nn.Sequential(nn.Linear(self.unified_dim, self.unified_dim),
-                                         nn.ELU(inplace=True),
-                                         nn.BatchNorm1d(self.unified_dim),
-                                         nn.Linear(self.unified_dim, self.num_expert),
-                                         # nn.Dropout(0.1),
-                                         # nn.Softmax(dim=1)
-                                         )
+        # self.text_gate_1 = nn.Sequential(nn.Linear(self.unified_dim, self.unified_dim),
+        #                                  SimpleGate(),
+        #                                  nn.BatchNorm1d(int(self.unified_dim/2)),
+        #                                  nn.Linear(int(self.unified_dim/2), self.num_expert),
+        #                                  # nn.Dropout(0.1),
+        #                                  # nn.Softmax(dim=1)
+        #                                  )
 
         # self.mm_gate_1 = nn.Sequential(nn.Linear(self.unified_dim + self.unified_dim, self.unified_dim),
         #                                SimpleGate(),
@@ -220,9 +232,9 @@ class UAMFD_Net(nn.Module):
         #                                               # nn.Dropout(0.2),
         #                                               )
         self.fusion_SE_network_main_task = nn.Sequential(nn.Linear(self.unified_dim, self.unified_dim),
-                                                         nn.ELU(inplace=True),
-                                                         nn.BatchNorm1d(self.unified_dim),
-                                                         nn.Linear(self.unified_dim, self.num_expert),
+                                                         SimpleGate(),
+                                                         nn.BatchNorm1d(int(self.unified_dim / 2)),
+                                                         nn.Linear(int(self.unified_dim / 2), self.num_expert),
                                                          # nn.Softmax(dim=1)
                                                          )
         ## AUXILIARY TASK GATES
@@ -252,7 +264,7 @@ class UAMFD_Net(nn.Module):
         # self.irre_dim = self.unified_dim
         # self.irre_feature = None
         # self.irr_MLP = nn.Linear(self.unified_dim, self.unified_dim)
-        # self.irrelevant_tensor = nn.Parameter(torch.rand((1,self.irre_dim)))
+        self.irrelevant_tensor = nn.Parameter(torch.ones((1, self.unified_dim)), requires_grad=True)
         # self.irrelevant_token = nn.Parameter(torch.randn(self.unified_dim),requires_grad=True) #torch.zeros_like(shared_mm_feature).cuda()
         ## POSITIONAL ENCODING FOR MM FEATURE
 
@@ -272,8 +284,8 @@ class UAMFD_Net(nn.Module):
 
         # CLASSIFICATION HEAD
         self.mix_trim = nn.Sequential(
-            nn.Linear(self.unified_dim, 64),
-            nn.ELU(inplace=True),
+            nn.Linear(self.unified_dim, 128),
+            SimpleGate(),
             nn.BatchNorm1d(64),
             # nn.Dropout(0.2),
         )
@@ -282,8 +294,8 @@ class UAMFD_Net(nn.Module):
         )
 
         self.text_trim = nn.Sequential(
-            nn.Linear(self.unified_dim, 64),
-            nn.ELU(inplace=True),
+            nn.Linear(self.unified_dim, 128),
+            SimpleGate(),
             nn.BatchNorm1d(64),
             # nn.Dropout(0.2),
         )
@@ -292,8 +304,8 @@ class UAMFD_Net(nn.Module):
         )
 
         self.image_trim = nn.Sequential(
-            nn.Linear(self.unified_dim, 64),
-            nn.ELU(inplace=True),
+            nn.Linear(self.unified_dim, 128),
+            SimpleGate(),
             nn.BatchNorm1d(64),
             # nn.Dropout(0.2),
         )
@@ -302,8 +314,8 @@ class UAMFD_Net(nn.Module):
         )
 
         self.vgg_trim = nn.Sequential(
-            nn.Linear(self.unified_dim, 64),
-            nn.ELU(inplace=True),
+            nn.Linear(self.unified_dim, 128),
+            SimpleGate(),
             nn.BatchNorm1d(64),
             # nn.Dropout(0.2),
         )
@@ -312,8 +324,8 @@ class UAMFD_Net(nn.Module):
         )
 
         self.aux_trim = nn.Sequential(
-            nn.Linear(self.unified_dim, 64),
-            nn.ELU(inplace=True),
+            nn.Linear(self.unified_dim, 128),
+            SimpleGate(),
             nn.BatchNorm1d(64),
             # nn.Dropout(0.2),
         )
@@ -321,11 +333,49 @@ class UAMFD_Net(nn.Module):
             nn.Linear(64, out_dim),
         )
 
+        #### mapping MLPs
+        self.mapping_IS_MLP = nn.Sequential(
+            nn.Linear(1, 128),
+            SimpleGate(),
+            nn.BatchNorm1d(64),
+            nn.Linear(64, 64),
+            SimpleGate(),
+            nn.BatchNorm1d(32),
+            nn.Linear(32, 1),
+        )
+        self.mapping_T_MLP = nn.Sequential(
+            nn.Linear(1, 128),
+            SimpleGate(),
+            nn.BatchNorm1d(64),
+            nn.Linear(64, 64),
+            SimpleGate(),
+            nn.BatchNorm1d(32),
+            nn.Linear(32, 1),
+        )
+        self.mapping_IP_MLP = nn.Sequential(
+            nn.Linear(1, 128),
+            SimpleGate(),
+            nn.BatchNorm1d(64),
+            nn.Linear(64, 64),
+            SimpleGate(),
+            nn.BatchNorm1d(32),
+            nn.Linear(32, 1),
+        )
+        self.mapping_CC_MLP = nn.Sequential(
+            nn.Linear(1, 128),
+            SimpleGate(),
+            nn.BatchNorm1d(64),
+            nn.Linear(64, 64),
+            SimpleGate(),
+            nn.BatchNorm1d(32),
+            nn.Linear(32, 1),
+        )
+
         final_fusing_expert = []
         for i in range(self.num_expert):
             fusing_expert = []
             for j in range(self.depth):
-                fusing_expert.append(Block(dim=self.unified_dim, num_heads=16))
+                fusing_expert.append(Block(dim=self.unified_dim, num_heads=8))
             fusing_expert = nn.ModuleList(fusing_expert)
             final_fusing_expert.append(fusing_expert)
 
@@ -333,7 +383,7 @@ class UAMFD_Net(nn.Module):
 
         self.mm_score = None
 
-        # self.final_fusing_experts = Block(dim=self.unified_dim, num_heads=16)
+        # self.final_fusing_experts = Block(dim=self.unified_dim, num_heads=8)
 
     def get_pretrain_features(self, input_ids, attention_mask, token_type_ids, image, no_ambiguity, category=None,
                               calc_ambiguity=False):
@@ -521,20 +571,23 @@ class UAMFD_Net(nn.Module):
         ## WEIGHTED MULTIMODAL FEATURES, REMEMBER TO DETACH AUX_OUTPUT
         # soft_scores = torch.softmax(torch.cat((aux_output,image_only_output,text_only_output,vgg_only_output),dim=1),dim=1)
         ## IF IMAGE-TEXT MATCHES, aux_output WOULD BE 0, OTHERWISE 1.
-        aux_atn_score = 1 - torch.sigmoid(aux_output).clone().detach()  # torch.abs((torch.sigmoid(aux_output).clone().detach()-0.5)*2)
-
-
-        image_atn_score = self.mapping(image_only_output) #torch.abs((torch.sigmoid(image_only_output).clone().detach() - 0.5) * 2)
-        text_atn_score = self.mapping(text_only_output) #torch.abs((torch.sigmoid(text_only_output).clone().detach() - 0.5) * 2)
-        vgg_atn_score = self.mapping(vgg_only_output) #torch.abs((torch.sigmoid(vgg_only_output).clone().detach() - 0.5) * 2)
-        irre_atn_score = 1-aux_atn_score
+        aux_atn_score = 1 - torch.sigmoid(
+            aux_output).clone().detach()  # torch.abs((torch.sigmoid(aux_output).clone().detach()-0.5)*2)
+        image_atn_score = self.mapping_IS_MLP(torch.sigmoid(image_only_output).clone().detach())
+        text_atn_score = self.mapping_T_MLP(torch.sigmoid(text_only_output).clone().detach())
+        vgg_atn_score = self.mapping_IP_MLP(torch.sigmoid(vgg_only_output).clone().detach())
+        # image_atn_score = self.mapping(image_only_output)  # torch.abs((torch.sigmoid(image_only_output).clone().detach() - 0.5) * 2)
+        # text_atn_score = self.mapping(text_only_output)  # torch.abs((torch.sigmoid(text_only_output).clone().detach() - 0.5) * 2)
+        # vgg_atn_score = self.mapping(vgg_only_output)  # torch.abs((torch.sigmoid(vgg_only_output).clone().detach() - 0.5) * 2)
+        irre_atn_score = self.mapping_CC_MLP(aux_atn_score.clone().detach())  # 1-aux_atn_score
 
         shared_image_feature = shared_image_feature * (image_atn_score)
         shared_text_feature = shared_text_feature * (text_atn_score)
-        shared_mm_feature = shared_mm_feature * (aux_atn_score)
+        shared_mm_feature = shared_mm_feature  # * (aux_atn_score)
         vgg_feature = vgg_feature * (vgg_atn_score)
         # irr_score = self.irr_MLP(torch.ones((batch_size,self.unified_dim)).cuda())
-        irr_score = torch.ones_like(shared_mm_feature).cuda()
+        irr_score = torch.ones_like(
+            shared_mm_feature) * self.irrelevant_tensor  # torch.ones_like(shared_mm_feature).cuda()
         irrelevant_token = irr_score * (irre_atn_score)
         concat_feature_main_biased = torch.stack((shared_image_feature,
                                                   shared_text_feature,
@@ -569,28 +622,27 @@ class UAMFD_Net(nn.Module):
         #     mix_output = torch.sigmoid(mix_output)
         if return_features:
             return mix_output, image_only_output, text_only_output, vgg_only_output, aux_output, \
-                   torch.mean(aux_output), \
-                   (final_feature_main_task_lite, shared_image_feature_lite, shared_text_feature_lite, vgg_feature_lite, shared_mm_feature_lite)
+                   torch.mean(self.irrelevant_tensor), \
+                   (final_feature_main_task_lite, shared_image_feature_lite, shared_text_feature_lite, vgg_feature_lite,
+                    shared_mm_feature_lite)
 
         return mix_output, image_only_output, text_only_output, vgg_only_output, aux_output, \
-               torch.mean(aux_output)
+               torch.mean(self.irrelevant_tensor)
 
     def mapping(self, score):
         ## score is within 0-1
-        diff_with_thresh = torch.abs(score-self.thresh)
-        interval = torch.where(score-self.thresh>0, 1-self.thresh, self.thresh)
-        return diff_with_thresh/interval
-
-
-
+        diff_with_thresh = torch.abs(score - self.thresh)
+        interval = torch.where(score - self.thresh > 0, 1 - self.thresh, self.thresh)
+        return diff_with_thresh / interval
 
 
 if __name__ == '__main__':
     from thop import profile
+
     model = UAMFD_Net()
     device = torch.device("cpu")
-    input1 = torch.randn(1,197,768)
+    input1 = torch.randn(1, 197, 768)
     input2 = torch.randn(1, 197, 768)
-    flops,params = profile(model,inputs=(input1,input2))
+    flops, params = profile(model, inputs=(input1, input2))
 
     # stat(self.localizer.to(torch.device('cuda:0')), (3, 512, 512))

@@ -74,7 +74,7 @@ class ResNet(nn.Module):
         super(ResNet, self).__init__()
         self.in_channels = 64
         self.use_SRM = use_SRM
-        if  self.use_SRM:
+        if self.use_SRM:
             ## bayar conv
             self.BayarConv2D = nn.Conv2d(image_channels, 3, 5, 1, padding=2, bias=False)
             self.bayar_mask = (torch.tensor(np.ones(shape=(5, 5)))).cuda()
@@ -82,16 +82,16 @@ class ResNet(nn.Module):
             self.bayar_final = (torch.tensor(np.zeros((5, 5)))).cuda()
             self.bayar_final[2, 2] = -1
 
-            ## srm conv
-            self.SRMConv2D = nn.Conv2d(image_channels, 9, 5, 1, padding=2, bias=False)
-            self.SRMConv2D.weight.data = torch.load('MantraNetv4.pt')['SRMConv2D.weight']
-
-            ##SRM filters (fixed)
-            for param in self.SRMConv2D.parameters():
-                param.requires_grad = False
-
-            self.relu = nn.LeakyReLU()
-            image_channels = 12
+            # ## srm conv
+            # self.SRMConv2D = nn.Conv2d(image_channels, 9, 5, 1, padding=2, bias=False)
+            # self.SRMConv2D.weight.data = torch.load('MantraNetv4.pt')['SRMConv2D.weight']
+            #
+            # ##SRM filters (fixed)
+            # for param in self.SRMConv2D.parameters():
+            #     param.requires_grad = False
+            #
+            self.relu = nn.ELU()
+            # image_channels = 12
 
         self.conv1 = nn.Conv2d(image_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
@@ -121,9 +121,9 @@ class ResNet(nn.Module):
             self.BayarConv2D.weight.data *= torch.pow(self.BayarConv2D.weight.data.sum(axis=(2, 3)).view(3, 3, 1, 1),-1)
             self.BayarConv2D.weight.data += self.bayar_final
             conv_bayar = self.BayarConv2D(x)
-            conv_srm = self.SRMConv2D(x)
+            # conv_srm = self.SRMConv2D(x)
 
-            x = torch.cat((conv_srm, conv_bayar), dim=1)
+            # x = torch.cat((conv_srm, conv_bayar), dim=1)
             x = self.relu(x)
 
         x = self.conv1(x)

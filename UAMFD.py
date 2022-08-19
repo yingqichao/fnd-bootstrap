@@ -29,10 +29,7 @@ import scipy.io as sio
 from torch.optim.lr_scheduler import ReduceLROnPlateau, MultiStepLR
 import pytorch_warmup as warmup
 from loss.focal_loss import focal_loss
-'''
-Unimodal-assisted Multimodal fake news detection
-Qichao Ying 2022.5.1
-'''
+
 GT_size = 224
 word_token_length = 197 # identical to size of MAE
 image_token_length = 197
@@ -453,9 +450,9 @@ def main(args):
     optimizer = torch.optim.AdamW(optim_params_normal,
                                  lr=1e-5,betas=(0.9, 0.999), weight_decay=0.01)
     optimizer_fast = torch.optim.AdamW(optim_params_fast,
-                                  lr=1e-4 if not fine_tuning>0 else 1e-5, betas=(0.9, 0.999), weight_decay=0.01)
+                                  lr=5e-5 if not fine_tuning>0 else 1e-5, betas=(0.9, 0.999), weight_decay=0.01)
     optimizer_extremefast = torch.optim.AdamW(optim_params_extremefast,
-                                       lr=2e-4 if not fine_tuning else 1e-5, betas=(0.9, 0.999), weight_decay=0.01)
+                                       lr=1e-4 if not fine_tuning else 1e-5, betas=(0.9, 0.999), weight_decay=0.01)
     # scheduler = ReduceLROnPlateau(optimizer,'min',factor=0.5,patience=3)
     # scheduler = MultiStepLR(optimizer,milestones=[10,20,30,40],gamma=0.5)
     num_steps = int(len(train_loader) * custom_num_epochs * 1.2)

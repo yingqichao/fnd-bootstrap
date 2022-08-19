@@ -25,6 +25,34 @@ from sklearn.preprocessing import label_binarize
 import scipy.io as sio
 from timm.models.vision_transformer import Block
 
+class AdaIN(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def mu(self, x):
+        """ Takes a (n,c,h,w) tensor as input and returns the average across
+        it's spatial dimensions as (h,w) tensor [See eq. 5 of paper]"""
+        return torch.sum(x,(1))/(x.shape[1])
+
+    def sigma(self, x):
+        """ Takes a (n,c,h,w) tensor as input and returns the standard deviation
+        across it's spatial dimensions as (h,w) tensor [See eq. 6 of paper] Note
+        the permutations are required for broadcasting"""
+        return torch.sqrt((torch.sum((x.permute([1,0])-self.mu(x)).permute([1,0])**2,(1))+0.000000023)/(x.shape[1]))
+
+    def forward(self, x, mu, sigma):
+        """ Takes a content embeding x and a style embeding y and changes
+        transforms the mean and standard deviation of the content embedding to
+        that of the style. [See eq. 8 of paper] Note the permutations are
+        required for broadcasting"""
+        # print(mu.shape) # 12
+        x_mean = self.mu(x)
+        x_std = self.sigma(x)
+        x_reduce_mean = x.permute([1, 0]) - x_mean
+        x_norm = x_reduce_mean/x_std
+        # print(x_mean.shape) # 768, 12
+        return (sigma.squeeze(1)*(x_norm + mu.squeeze(1))).permute([1,0])
+
 class SimpleGate(nn.Module):
     def __init__(self, dim=1):
         super(SimpleGate, self).__init__()
@@ -33,6 +61,7 @@ class SimpleGate(nn.Module):
     def forward(self,x):
         x1,x2 = x.chunk(2,dim=self.dim)
         return x1*x2
+
 
 class TokenAttention(torch.nn.Module):
     """
@@ -70,11 +99,12 @@ class UAMFD_Net(nn.Module):
         self.model_size = model_size
         self.dataset = dataset
         self.LOW_BATCH_SIZE_AND_LR = ['Twitter', 'politi']
+        print("we are using adaIN")
 
         self.unified_dim, self.text_dim = 768, 768
         self.is_use_bce = is_use_bce
         out_dim = 1 if self.is_use_bce else 2
-        self.num_expert = 3  # 2
+        self.num_expert = 2  # 2
         self.depth = 1  # 2
         super(UAMFD_Net, self).__init__()
         # IMAGE: MAE
@@ -84,6 +114,7 @@ class UAMFD_Net(nn.Module):
         self.image_model = models_mae.__dict__["mae_vit_{}_patch16".format(self.model_size)](norm_pix_loss=False)
         checkpoint = torch.load('./mae_pretrain_vit_{}.pth'.format(self.model_size), map_location='cpu')
         self.image_model.load_state_dict(checkpoint['model'], strict=False)
+
         # for param in self.image_model.parameters():
         #     param.requires_grad = False
 
@@ -332,42 +363,55 @@ class UAMFD_Net(nn.Module):
         )
 
         #### mapping MLPs
-        self.mapping_IS_MLP = nn.Sequential(
-            nn.Linear(1, 128),
-            SimpleGate(),
-            nn.BatchNorm1d(64),
-            nn.Linear(64, 64),
-            SimpleGate(),
-            nn.BatchNorm1d(32),
-            nn.Linear(32, 1),
+        self.mapping_IS_MLP_mu = nn.Sequential(
+            nn.Linear(1, self.unified_dim),
+            nn.SiLU(),
+            # nn.BatchNorm1d(self.unified_dim),
+            nn.Linear(self.unified_dim, 1),
         )
-        self.mapping_T_MLP = nn.Sequential(
-            nn.Linear(1, 128),
-            SimpleGate(),
-            nn.BatchNorm1d(64),
-            nn.Linear(64, 64),
-            SimpleGate(),
-            nn.BatchNorm1d(32),
-            nn.Linear(32, 1),
+        self.mapping_IS_MLP_sigma = nn.Sequential(
+            nn.Linear(1, self.unified_dim),
+            nn.SiLU(),
+            # nn.BatchNorm1d(self.unified_dim),
+            nn.Linear(self.unified_dim,1),
         )
-        self.mapping_IP_MLP = nn.Sequential(
-            nn.Linear(1, 128),
-            SimpleGate(),
-            nn.BatchNorm1d(64),
-            nn.Linear(64, 64),
-            SimpleGate(),
-            nn.BatchNorm1d(32),
-            nn.Linear(32, 1),
+        self.mapping_T_MLP_mu = nn.Sequential(
+            nn.Linear(1, self.unified_dim),
+            nn.SiLU(),
+            # nn.BatchNorm1d(self.unified_dim),
+            nn.Linear(self.unified_dim, 1),
         )
-        self.mapping_CC_MLP = nn.Sequential(
-            nn.Linear(1, 128),
-            SimpleGate(),
-            nn.BatchNorm1d(64),
-            nn.Linear(64, 64),
-            SimpleGate(),
-            nn.BatchNorm1d(32),
-            nn.Linear(32, 1),
+        self.mapping_T_MLP_sigma = nn.Sequential(
+            nn.Linear(1, self.unified_dim),
+            nn.SiLU(),
+            # nn.BatchNorm1d(self.unified_dim),
+            nn.Linear(self.unified_dim, 1),
         )
+        self.mapping_IP_MLP_mu = nn.Sequential(
+            nn.Linear(1, self.unified_dim),
+            nn.SiLU(),
+            # nn.BatchNorm1d(self.unified_dim),
+            nn.Linear(self.unified_dim, 1),
+        )
+        self.mapping_IP_MLP_sigma = nn.Sequential(
+            nn.Linear(1, self.unified_dim),
+            nn.SiLU(),
+            # nn.BatchNorm1d(self.unified_dim),
+            nn.Linear(self.unified_dim, 1),
+        )
+        self.mapping_CC_MLP_mu = nn.Sequential(
+            nn.Linear(1, self.unified_dim),
+            nn.SiLU(),
+            # nn.BatchNorm1d(self.unified_dim),
+            nn.Linear(self.unified_dim, 1),
+        )
+        self.mapping_CC_MLP_sigma = nn.Sequential(
+            nn.Linear(1, self.unified_dim),
+            nn.SiLU(),
+            # nn.BatchNorm1d(self.unified_dim),
+            nn.Linear(self.unified_dim, 1),
+        )
+        self.adaIN = AdaIN()
 
         final_fusing_expert = []
         for i in range(self.num_expert):
@@ -570,21 +614,25 @@ class UAMFD_Net(nn.Module):
         # soft_scores = torch.softmax(torch.cat((aux_output,image_only_output,text_only_output,vgg_only_output),dim=1),dim=1)
         ## IF IMAGE-TEXT MATCHES, aux_output WOULD BE 0, OTHERWISE 1.
         aux_atn_score = 1 - torch.sigmoid(aux_output).clone().detach()  # torch.abs((torch.sigmoid(aux_output).clone().detach()-0.5)*2)
-        image_atn_score = self.mapping_IS_MLP(torch.sigmoid(image_only_output).clone().detach())
-        text_atn_score = self.mapping_T_MLP(torch.sigmoid(text_only_output).clone().detach())
-        vgg_atn_score = self.mapping_IP_MLP(torch.sigmoid(vgg_only_output).clone().detach())
+        is_mu = self.mapping_IS_MLP_mu(torch.sigmoid(image_only_output).clone().detach())
+        t_mu = self.mapping_T_MLP_mu(torch.sigmoid(text_only_output).clone().detach())
+        vgg_mu = self.mapping_IP_MLP_mu(torch.sigmoid(vgg_only_output).clone().detach())
+        cc_mu = self.mapping_CC_MLP_mu(aux_atn_score.clone().detach())  # 1-aux_atn_score
+        is_sigma = self.mapping_IS_MLP_sigma(torch.sigmoid(image_only_output).clone().detach())
+        t_sigma = self.mapping_T_MLP_sigma(torch.sigmoid(text_only_output).clone().detach())
+        vgg_sigma = self.mapping_IP_MLP_sigma(torch.sigmoid(vgg_only_output).clone().detach())
+        cc_sigma = self.mapping_CC_MLP_sigma(aux_atn_score.clone().detach())  # 1-aux_atn_score
         # image_atn_score = self.mapping(image_only_output)  # torch.abs((torch.sigmoid(image_only_output).clone().detach() - 0.5) * 2)
         # text_atn_score = self.mapping(text_only_output)  # torch.abs((torch.sigmoid(text_only_output).clone().detach() - 0.5) * 2)
         # vgg_atn_score = self.mapping(vgg_only_output)  # torch.abs((torch.sigmoid(vgg_only_output).clone().detach() - 0.5) * 2)
-        irre_atn_score = self.mapping_CC_MLP(torch.sigmoid(aux_atn_score).clone().detach()) #1-aux_atn_score
 
-        shared_image_feature = shared_image_feature * (image_atn_score)
-        shared_text_feature = shared_text_feature * (text_atn_score)
-        shared_mm_feature = shared_mm_feature #* (aux_atn_score)
-        vgg_feature = vgg_feature * (vgg_atn_score)
+        shared_image_feature = self.adaIN(shared_image_feature,is_mu,is_sigma) #shared_image_feature * (image_atn_score)
+        shared_text_feature = self.adaIN(shared_text_feature,t_mu,t_sigma) #shared_text_feature * (text_atn_score)
+        shared_mm_feature = shared_mm_feature #shared_mm_feature #* (aux_atn_score)
+        vgg_feature = self.adaIN(vgg_feature,vgg_mu,vgg_sigma) #vgg_feature * (vgg_atn_score)
         # irr_score = self.irr_MLP(torch.ones((batch_size,self.unified_dim)).cuda())
         irr_score = torch.ones_like(shared_mm_feature)*self.irrelevant_tensor #torch.ones_like(shared_mm_feature).cuda()
-        irrelevant_token = irr_score * (irre_atn_score)
+        irrelevant_token = self.adaIN(irr_score,cc_mu,cc_sigma)
         concat_feature_main_biased = torch.stack((shared_image_feature,
                                                   shared_text_feature,
                                                   shared_mm_feature,
