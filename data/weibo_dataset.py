@@ -89,8 +89,9 @@ class weibo_dataset(data.Dataset):
         # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 
     ])
-
-        wb = openpyxl.load_workbook(f"{self.root_path}/{'train' if is_train else 'test'}_datasets{'_Weibo21' if '21' in self.root_path else '_WWW'}.xlsx")
+        if '21' in self.root_path:
+            print("We are using Weibo 21.")
+        wb = openpyxl.load_workbook(f"{self.root_path}/{'train' if is_train else 'test'}_datasets{'_Weibo21' if '21' in self.root_path else ''}.xlsx")
 
         sheetnames = wb.sheetnames
         sheet = wb[sheetnames[0]]
@@ -177,6 +178,23 @@ class weibo_dataset(data.Dataset):
                 if img_GT is None:
                     print(f"File cannot open!{GT_path}")
                     index = np.random.randint(0, len(self.label_dict))
+                else:
+                    H_origin, W_origin, _ = img_GT.shape
+                    if H_origin < 100 or W_origin < 100 or H_origin / W_origin < 0.33 or H_origin / W_origin > 3:  # 'text' in category:
+                        # print(f"Unimodal text detected {H_origin} {W_origin}. Set as zero matrix")
+                        find_path = False
+                        index = np.random.randint(0, len(self.label_dict))
+                        # self.not_valid_set.add(GT_path)
+                        # img_GT = torch.zeros_like(img_GT)
+                    elif len(content)<5:
+                        # print("Unimodal image detected. Set as \"No image provided for this news\"")
+                        # content = "No image provided for this news"
+                        find_path = False
+                        print("find length not satisfying")
+                        index = np.random.randint(0, len(self.label_dict))
+                        # self.not_valid_set.add(GT_path)
+                    else:
+                        find_path = True
         # if '/' in GT_path:
         #     # excel中文件名前面可能会有'(non)rumor_images/'，这个在读图的时候是不需要的，直接过滤
         #     GT_path = GT_path[GT_path.rfind('/')+1:]

@@ -182,21 +182,21 @@ class UAMFD_Net(nn.Module):
                                      # nn.Softmax(dim=1)
                                      )
 
-        self.image_gate_mae_1 = nn.Sequential(nn.Linear(self.unified_dim, self.unified_dim),
-                                              nn.ELU(inplace=True),
-                                              nn.BatchNorm1d(int(self.unified_dim/2)),
-                                              nn.Linear(int(self.unified_dim/2), self.num_expert),
-                                              # nn.Dropout(0.1),
-                                              # nn.Softmax(dim=1)
-                                              )
+        # self.image_gate_mae_1 = nn.Sequential(nn.Linear(self.unified_dim, self.unified_dim),
+        #                                       SimpleGate(),
+        #                                       nn.BatchNorm1d(int(self.unified_dim/2)),
+        #                                       nn.Linear(int(self.unified_dim/2), self.num_expert),
+        #                                       # nn.Dropout(0.1),
+        #                                       # nn.Softmax(dim=1)
+        #                                       )
 
-        self.text_gate_1 = nn.Sequential(nn.Linear(self.unified_dim, self.unified_dim),
-                                         SimpleGate(),
-                                         nn.BatchNorm1d(int(self.unified_dim/2)),
-                                         nn.Linear(int(self.unified_dim/2), self.num_expert),
-                                         # nn.Dropout(0.1),
-                                         # nn.Softmax(dim=1)
-                                         )
+        # self.text_gate_1 = nn.Sequential(nn.Linear(self.unified_dim, self.unified_dim),
+        #                                  SimpleGate(),
+        #                                  nn.BatchNorm1d(int(self.unified_dim/2)),
+        #                                  nn.Linear(int(self.unified_dim/2), self.num_expert),
+        #                                  # nn.Dropout(0.1),
+        #                                  # nn.Softmax(dim=1)
+        #                                  )
 
         # self.mm_gate_1 = nn.Sequential(nn.Linear(self.unified_dim + self.unified_dim, self.unified_dim),
         #                                SimpleGate(),

@@ -47,6 +47,7 @@ class FakeNet_dataset(data.Dataset):
         print("Using More Negative Examples: {}".format(self.data_augment))
         print("Using AMBIGUITY LEARNING: {}".format(self.with_ambiguity))
         print("Using SOFT LABELS: {}".format(self.use_soft_label))
+        print("We are resampling bad examples using randint")
         self.is_train = is_train
         self.root_path = root_path if not not_on_12 else root_path[5:]
         self.index = 0
@@ -113,6 +114,7 @@ class FakeNet_dataset(data.Dataset):
                 for times in range(self.duplicate_fake_times):
                     self.label_dict.append(record)
         print(f"Skipped Num {skipped_num}")
+        self.not_valid_set = set()
 
         # AMBIGUITY LEARNING
         if self.dataset_name == 'gossip' and self.is_train and self.with_ambiguity:
@@ -154,62 +156,74 @@ class FakeNet_dataset(data.Dataset):
     def __getitem__(self, index):
 
         GT_size = self.image_size # 这个自己指定一下
-
+        find_path = False
         # get GT image
-        record = self.label_dict[index]
-        images, label, content = record['images'], record['label'], record['content']
-        category = record['category']
-        # 注意： 收集MixSet的时候，把真新闻标记为1，因此最好把它反过来
+        while not find_path:
+            record = self.label_dict[index]
+            images, label, content = record['images'], record['label'], record['content']
+            category = record['category']
+            # 注意： 收集MixSet的时候，把真新闻标记为1，因此最好把它反过来
 
-        GT_path = images #imgs[np.random.randint(0,len(imgs))]
-        # if '/' in GT_path:
-        #     # excel中文件名前面可能会有'(non)rumor_images/'，这个在读图的时候是不需要的，直接过滤
-        #     GT_path = GT_path[GT_path.rfind('/')+1:]
-        img_GT = None
-        try:
-            GT_path = "{}/{}/{}/{}".format(self.root_path,'Images', record['subfolder'], GT_path)
-            img_GT = cv2.imread(GT_path, cv2.IMREAD_COLOR) # util.read_img(GT_path)
-            if img_GT is None:
-                img_GT = Image.open(GT_path)
-                img_GT = self.resize_and_to_tensor(img_GT).float()
-                if img_GT.shape[0]==1:
-                    img_GT = img_GT.expand(3,-1,-1)
-                elif img_GT.shape[0]==4:
-                    img_GT = img_GT[:3,:,:]
-            else:
-                img_GT = img_GT.astype(np.float32) / 255.
-                if img_GT.ndim == 2:
-                    img_GT = np.expand_dims(img_GT, axis=2)
-                # some images have 4 channels
-                if img_GT.shape[2] > 3:
-                    img_GT = img_GT[:, :, :3]
+            GT_path = images #imgs[np.random.randint(0,len(imgs))]
+            # if '/' in GT_path:
+            #     # excel中文件名前面可能会有'(non)rumor_images/'，这个在读图的时候是不需要的，直接过滤
+            #     GT_path = GT_path[GT_path.rfind('/')+1:]
+            img_GT = None
+            try:
+                GT_path = "{}/{}/{}/{}".format(self.root_path,'Images', record['subfolder'], GT_path)
+                if not GT_path in self.not_valid_set:
 
-                img_GT = util.channel_convert(img_GT.shape[2], 'RGB', [img_GT])[0]
-                H_origin, W_origin, _ = img_GT.shape
+                    img_GT = cv2.imread(GT_path, cv2.IMREAD_COLOR) # util.read_img(GT_path)
+                    if img_GT is None:
+                        img_GT = Image.open(GT_path)
+                        img_GT = self.resize_and_to_tensor(img_GT).float()
+                        if img_GT.shape[0]==1:
+                            img_GT = img_GT.expand(3,-1,-1)
+                        elif img_GT.shape[0]==4:
+                            img_GT = img_GT[:3,:,:]
+                    else:
+                        img_GT = img_GT.astype(np.float32) / 255.
+                        if img_GT.ndim == 2:
+                            img_GT = np.expand_dims(img_GT, axis=2)
+                        # some images have 4 channels
+                        if img_GT.shape[2] > 3:
+                            img_GT = img_GT[:, :, :3]
 
-                ###### directly resize instead of crop
-                img_GT = cv2.resize(np.copy(img_GT), (GT_size, GT_size),
-                                    interpolation=cv2.INTER_LINEAR)
+                        img_GT = util.channel_convert(img_GT.shape[2], 'RGB', [img_GT])[0]
+                        H_origin, W_origin, _ = img_GT.shape
 
-                orig_height, orig_width, _ = img_GT.shape
-                H, W, _ = img_GT.shape
+                        ###### directly resize instead of crop
+                        img_GT = cv2.resize(np.copy(img_GT), (GT_size, GT_size),
+                                            interpolation=cv2.INTER_LINEAR)
 
-                # BGR to RGB, HWC to CHW, numpy to tensor
-                if img_GT.shape[2] == 3:
-                    img_GT = img_GT[:, :, [2, 1, 0]]
+                        orig_height, orig_width, _ = img_GT.shape
+                        H, W, _ = img_GT.shape
 
-                img_GT = torch.from_numpy(np.ascontiguousarray(np.transpose(img_GT, (2, 0, 1)))).float()
+                        # BGR to RGB, HWC to CHW, numpy to tensor
+                        if img_GT.shape[2] == 3:
+                            img_GT = img_GT[:, :, [2, 1, 0]]
 
-                if H_origin<100 or W_origin<100 or H_origin/W_origin<0.33 or H_origin/W_origin>3:#'text' in category:
-                    # print(f"Unimodal text detected {H_origin} {W_origin}. Set as zero matrix")
-                    img_GT = torch.zeros_like(img_GT)
-                elif 'image' in category:
-                    # print("Unimodal image detected. Set as \"No image provided for this news\"")
-                    content = "No image provided for this news"
+                        img_GT = torch.from_numpy(np.ascontiguousarray(np.transpose(img_GT, (2, 0, 1)))).float()
 
-        except Exception:
-            print("[Exception] load image error at {}. Using a zero-matrix instead")
-            img_GT = torch.zeros((3,GT_size,GT_size))
+                        if H_origin<100 or W_origin<100 or H_origin/W_origin<0.33 or H_origin/W_origin>3:#'text' in category:
+                            # print(f"Unimodal text detected {H_origin} {W_origin}. Set as zero matrix")
+                            find_path = False
+                            # self.not_valid_set.add(GT_path)
+                            # img_GT = torch.zeros_like(img_GT)
+                        elif 'image' in category:
+                            # print("Unimodal image detected. Set as \"No image provided for this news\"")
+                            # content = "No image provided for this news"
+                            find_path = False
+                            self.not_valid_set.add(GT_path)
+                        else:
+                            find_path = True
+
+                index = np.random.randint(0, len(self.label_dict))
+
+
+            except Exception:
+                print("[Exception] load image error at {}. Using a zero-matrix instead")
+                img_GT = torch.zeros((3,GT_size,GT_size))
 
 
         # AMBIGUITY: SAME, REPEATED CODE

@@ -45,20 +45,20 @@ token_uncased = BertTokenizer.from_pretrained('bert-base-uncased')
 #     'translate.google.cn'
 # ])
 
-def init_dist(backend='nccl', **kwargs):
-    ''' initialization for distributed training'''
-    # torch.cuda._initialized = True
-    # torch.backends.cudnn.benchmark = True
-    if mp.get_start_method(allow_none=True) != 'spawn':
-        mp.set_start_method('spawn')
-    rank = int(os.environ['RANK'])
-    num_gpus = torch.cuda.device_count()
-    torch.cuda.set_device(rank % num_gpus)
-    dist.init_process_group(backend=backend, **kwargs)
-    world_size = torch.distributed.get_world_size()
-    rank = torch.distributed.get_rank()
-    print("world: {},rank: {},num_gpus:{}".format(world_size,rank,num_gpus))
-    return world_size, rank
+# def init_dist(backend='nccl', **kwargs):
+#     ''' initialization for distributed training'''
+#     # torch.cuda._initialized = True
+#     # torch.backends.cudnn.benchmark = True
+#     if mp.get_start_method(allow_none=True) != 'spawn':
+#         mp.set_start_method('spawn')
+#     rank = int(os.environ['RANK'])
+#     num_gpus = torch.cuda.device_count()
+#     torch.cuda.set_device(rank % num_gpus)
+#     dist.init_process_group(backend=backend, **kwargs)
+#     world_size = torch.distributed.get_world_size()
+#     rank = torch.distributed.get_rank()
+#     print("world: {},rank: {},num_gpus:{}".format(world_size,rank,num_gpus))
+#     return world_size, rank
 
 
 def to_var(x):
@@ -818,12 +818,13 @@ def evaluate(validate_loader, model, criterion, progbar=None, setting={}):
                     #                                                                     soft_scores[1].item(), \
                     #                                                                     soft_scores[2].item(), \
                     #                                                                     soft_scores[3].item()
+                    results.append(record)
 
                     # save_name = f'/home/groupshare/mae-main/example/{dataset_name}/{image_no}.png'
                     # if not os.path.exists(save_name):
                     #     torchvision.utils.save_image((image[idx:idx+1] * 255).round() / 255,
                     #                                  save_name, nrow=1, padding=0, normalize=False)
-                    # results.append(record)
+                    #
                     # image_no += 1
 
                 if y_pred_img[idx]==y_GT[idx]: img_correct[thresh_idx] += 1
@@ -889,11 +890,11 @@ def evaluate(validate_loader, model, criterion, progbar=None, setting={}):
     np.savetxt('npresultm.txt',resultm)
 
 
-    # import pandas as pd
-    # df = pd.DataFrame(results)
-    # pandas_file = f'/home/groupshare/mae-main/example/{dataset_name}/experiment.xlsx'
-    # df.to_excel(pandas_file)
-    # print(f"Excel Saved at {pandas_file}")
+    import pandas as pd
+    df = pd.DataFrame(results)
+    pandas_file = f'/groupshare/mae-main/example/{dataset_name}_experiment.xlsx'
+    df.to_excel(pandas_file)
+    print(f"Excel Saved at {pandas_file}")
 
     val_accuracy, real_accuracy, fake_accuracy, real_precision, fake_precision = [0]*len(THRESH),[0]*len(THRESH),[0]*len(THRESH),[0]*len(THRESH),[0]*len(THRESH)
     real_recall, fake_recall, real_F1, fake_F1 = [0]*len(THRESH),[0]*len(THRESH),[0]*len(THRESH),[0]*len(THRESH)
