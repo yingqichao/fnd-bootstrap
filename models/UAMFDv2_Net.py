@@ -216,6 +216,14 @@ class UAMFD_Net(nn.Module):
                                      # nn.Dropout(0.1),
                                      # nn.Softmax(dim=1)
                                      )
+        self.mm_gate_1 = nn.Sequential(nn.Linear(self.unified_dim, self.unified_dim),
+                                     nn.SiLU(),
+                                     # SimpleGate(),
+                                     # nn.BatchNorm1d(int(self.unified_dim/2)),
+                                     nn.Linear(self.unified_dim, self.num_expert),
+                                     # nn.Dropout(0.1),
+                                     # nn.Softmax(dim=1)
+                                     )
 
         # self.image_gate_mae_1 = nn.Sequential(nn.Linear(self.unified_dim, self.unified_dim),
         #                                       SimpleGate(),
@@ -232,14 +240,6 @@ class UAMFD_Net(nn.Module):
         #                                  # nn.Dropout(0.1),
         #                                  # nn.Softmax(dim=1)
         #                                  )
-
-        # self.mm_gate_1 = nn.Sequential(nn.Linear(self.unified_dim + self.unified_dim, self.unified_dim),
-        #                                SimpleGate(),
-        #                                nn.BatchNorm1d(int(self.unified_dim / 2)),
-        #                                nn.Linear(int(self.unified_dim/2), self.num_expert),
-        #                                # nn.Dropout(0.1),
-        #                                # nn.Softmax(dim=1)
-        #                                )
 
         ## MAIN TASK GATES
         self.final_attention = TokenAttention(self.unified_dim)
@@ -446,7 +446,8 @@ class UAMFD_Net(nn.Module):
 
         return image_feature, text_feature
 
-    def forward(self, input_ids, attention_mask, token_type_ids, image, no_ambiguity, category=None,
+    def forward(self, input_ids, attention_mask, token_type_ids, image, no_ambiguity,
+                image_aug=None, category=None,
                 calc_ambiguity=False, image_feature=None, text_feature=None,
                 return_features=False):
 
@@ -454,6 +455,8 @@ class UAMFD_Net(nn.Module):
         # print(attention_mask.shape) # (24,197)
         # print(token_type_ids.shape) # (24,197)
         batch_size = image.shape[0]
+        if image_aug is None:
+            image_aug = image
 
         ## POSITIONAL ENCODING FOR MM FEATURE
         p_1d_mm = PositionalEncoding1D(self.unified_dim)
@@ -479,7 +482,7 @@ class UAMFD_Net(nn.Module):
         ## FILTER OUT INVALID MODAL INFORMATION
         ##  NEWS TYPE: 0 MULTIMODAL 1 IMAGE 2 TEXT
         if image_feature is None:
-            image_feature = self.image_model.forward_ying(image)
+            image_feature = self.image_model.forward_ying(image_aug)
         # for j in range(self.finetune_depth):
         #     image_feature = self.image_model_finetune[j](image_feature + self.positional_image)
 
@@ -514,11 +517,12 @@ class UAMFD_Net(nn.Module):
         # gate_image_feature = self.soft_max(torch.cat((gate_image_feature_mae,gate_image_feature_vgg),dim=1))
         gate_image_feature = self.image_gate_mae(image_atn_feature)
         gate_text_feature = self.text_gate(text_atn_feature)  # 64 320
+
         gate_mm_feature = self.mm_gate(mm_atn_feature)
+        gate_mm_feature_1 = self.mm_gate_1(mm_atn_feature)
 
         # gate_image_feature_1 = self.image_gate_mae_1(image_atn_feature)
         # gate_text_feature_1 = self.text_gate_1(text_atn_feature)  # 64 320
-        # gate_mm_feature_1 = self.mm_gate_1(torch.cat((image_atn_feature, text_atn_feature), dim=1))
 
         # IMAGE EXPERTS
         # NOTE: IMAGE/TEXT/MM EXPERTS WILL BE MLPS IF WE USE WWW LOADER
@@ -545,16 +549,16 @@ class UAMFD_Net(nn.Module):
         shared_text_feature = shared_text_feature[:, 0]
 
         mm_feature = torch.cat((image_feature, text_feature), dim=1)
-        shared_mm_feature = 0
+        shared_mm_feature, shared_mm_feature_CC = 0, 0
         for i in range(self.num_expert):
             mm_expert = self.mm_experts[i]
             tmp_mm_feature = mm_feature
             for j in range(self.depth):
                 tmp_mm_feature = mm_expert[j](tmp_mm_feature + self.positional_mm)
             shared_mm_feature += (tmp_mm_feature * gate_mm_feature[:, i].unsqueeze(1).unsqueeze(1))
-            # shared_mm_feature_1 += (tmp_mm_feature * gate_mm_feature_1[:, i].unsqueeze(1).unsqueeze(1))
+            shared_mm_feature_CC += (tmp_mm_feature * gate_mm_feature_1[:, i].unsqueeze(1).unsqueeze(1))
         shared_mm_feature = shared_mm_feature[:, 0]
-        # shared_mm_feature_1 = shared_mm_feature_1[:, 0]
+        shared_mm_feature_CC = shared_mm_feature_CC[:, 0]
 
         # image_mask = torch.ones_like(shared_image_feature)
         # mm_mask = torch.ones_like(shared_mm_feature)
@@ -599,7 +603,7 @@ class UAMFD_Net(nn.Module):
         #         tmp_fusion_feature = fusing_expert[j](tmp_fusion_feature+self.positional_modal_representation)
         #     tmp_fusion_feature = tmp_fusion_feature[:,0]
         #     final_feature_aux_task += (tmp_fusion_feature * gate_aux_task[:, i].unsqueeze(1))
-        shared_mm_feature_lite = self.aux_trim(shared_mm_feature)
+        shared_mm_feature_lite = self.aux_trim(shared_mm_feature_CC)
         aux_output = self.aux_classifier(shared_mm_feature_lite)  # final_feature_aux_task
         # if self.is_use_bce:
         #     aux_output = torch.sigmoid(aux_output)

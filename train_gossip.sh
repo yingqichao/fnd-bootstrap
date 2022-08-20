@@ -7,6 +7,5 @@ CUDA_VISIBLE_DEVICES=1 python ./UAMFD.py -train_dataset gossip \
                                         -duplicate_fake_times 0 \
                                         -network_arch UAMFDv2 \
                                         -is_filter 0 \
-                                        -checkpoint /groupshare/CIKM_ying_output//gossip/19_814_89.pkl \
                                         -not_on_12 1
 # -checkpoint /groupshare/CIKM_ying_output//gossip/19_814_89.pkl \

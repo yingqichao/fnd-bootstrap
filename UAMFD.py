@@ -98,7 +98,8 @@ def collate_fn_english(data):
     item = data[0]
     sents = [i[0][0] for i in data]
     image = [i[0][1] for i in data]
-    labels = [i[0][2] for i in data]
+    image_aug = [i[0][2] for i in data]
+    labels = [i[0][3] for i in data]
     category = [0 for i in data]
     GT_path = [i[1] for i in data]
     token_data = token_uncased.batch_encode_plus(batch_text_or_text_pairs=sents,
@@ -114,11 +115,12 @@ def collate_fn_english(data):
     attention_mask = token_data['attention_mask']
     token_type_ids = token_data['token_type_ids']
     image = torch.stack(image)
+    image_aug = torch.stack(image_aug)
     labels = torch.LongTensor(labels)
     category = torch.LongTensor(category)
 
     if len(item) <= 2:
-        return (input_ids, attention_mask, token_type_ids), (image, labels, category, sents), GT_path
+        return (input_ids, attention_mask, token_type_ids), (image, image_aug, labels, category, sents), GT_path
     else:
         sents1 = [i[2][0] for i in data]
         image1 = [i[2][1] for i in data]
@@ -136,7 +138,7 @@ def collate_fn_english(data):
         image1 = torch.stack(image1)
         labels1 = torch.LongTensor(labels1)
 
-        return (input_ids, attention_mask, token_type_ids), (image, labels, category, sents), GT_path, \
+        return (input_ids, attention_mask, token_type_ids), (image, image_aug, labels, category, sents), GT_path, \
                (input_ids1, attention_mask1, token_type_ids1), (image1, labels1, sents1)
 
 def collate_fn_chinese(data):
@@ -149,7 +151,8 @@ def collate_fn_chinese(data):
     item = data[0]
     sents = [i[0][0] for i in data]
     image = [i[0][1] for i in data]
-    labels = [i[0][2] for i in data]
+    image_aug = [i[0][2] for i in data]
+    labels = [i[0][3] for i in data]
     category = [0 for i in data]
     GT_path = [i[1] for i in data]
     token_data = token_chinese.batch_encode_plus(batch_text_or_text_pairs=sents,
@@ -165,11 +168,12 @@ def collate_fn_chinese(data):
     attention_mask = token_data['attention_mask']
     token_type_ids = token_data['token_type_ids']
     image = torch.stack(image)
+    image_aug = torch.stack(image_aug)
     labels = torch.LongTensor(labels)
     category = torch.LongTensor(category)
 
     if len(item) <= 2:
-        return (input_ids, attention_mask, token_type_ids), (image, labels, category, sents), GT_path
+        return (input_ids, attention_mask, token_type_ids), (image, image_aug, labels, category, sents), GT_path
     else:
         sents1 = [i[2][0] for i in data]
         image1 = [i[2][1] for i in data]
@@ -187,7 +191,7 @@ def collate_fn_chinese(data):
         image1 = torch.stack(image1)
         labels1 = torch.LongTensor(labels1)
 
-        return (input_ids, attention_mask, token_type_ids), (image, labels, category, sents), GT_path, \
+        return (input_ids, attention_mask, token_type_ids), (image, image_aug, labels, category, sents), GT_path, \
                (input_ids1, attention_mask1, token_type_ids1), (image1, labels1, sents1)
 
 # from torch.utils.tensorboard import SummaryWriter
@@ -497,11 +501,11 @@ def main(args):
                         texts, others, GT_path, texts1, others1 = items
                         input_ids, attention_mask, token_type_ids = texts
                         input_ids1, attention_mask1, token_type_ids1 = texts1
-                        image, labels, category, sents = others
+                        image, image_aug, labels, category, sents = others
                         image1, labels1, sents1 = others1
-                        input_ids, attention_mask, token_type_ids, image, labels, category = \
+                        input_ids, attention_mask, token_type_ids, image, image_aug, labels, category = \
                             to_var(input_ids), to_var(attention_mask), to_var(token_type_ids), \
-                            to_var(image), to_var(labels), to_var(category)
+                            to_var(image), to_var(image_aug), to_var(labels), to_var(category)
                         input_ids1, attention_mask1, token_type_ids1, image1, labels1 = \
                             to_var(input_ids1), to_var(attention_mask1), to_var(token_type_ids1), \
                             to_var(image1), to_var(labels1)
@@ -511,10 +515,10 @@ def main(args):
                         """
                         texts, others, GT_path = items
                         input_ids, attention_mask, token_type_ids = texts
-                        image, labels, category, sents = others
-                        input_ids, attention_mask, token_type_ids, image, labels, category = \
+                        image, image_aug, labels, category, sents = others
+                        input_ids, attention_mask, token_type_ids, image, image_aug, labels, category = \
                             to_var(input_ids), to_var(attention_mask), to_var(token_type_ids), \
-                            to_var(image), to_var(labels), to_var(category)
+                            to_var(image), to_var(image_aug), to_var(labels), to_var(category)
 
                     # with torch.cuda.amp.autocast():
                     loss_ambiguity = 0
@@ -547,6 +551,7 @@ def main(args):
                                           attention_mask=attention_mask,
                                           token_type_ids=token_type_ids,
                                           image=image,
+                                          image_aug=image_aug,
                                           no_ambiguity=not setting['with_ambiguity'],
                                           category=category,
                                           calc_ambiguity=False,
@@ -561,7 +566,7 @@ def main(args):
                     loss_CE_text = criterion(text_only_output, labels)
                     loss_CE_vgg = criterion(vgg_only_output, labels)
                     loss_single_modal = (loss_CE_vgg+loss_CE_text+loss_CE_image)/3
-                    loss = loss_CE+2.0*loss_ambiguity+1.0*loss_single_modal
+                    loss = loss_CE+1.0*loss_ambiguity+1.0*loss_single_modal
                     # if use_scalar:
                     #     writer.add_scalar('loss_CE', loss_CE.item(), global_step=global_step)
                     #     writer.add_scalar('loss_CE_image', loss_CE_image.item(), global_step=global_step)
@@ -739,15 +744,16 @@ def evaluate(validate_loader, model, criterion, progbar=None, setting={}):
         # else:
         texts, others, GT_path = items
         input_ids, attention_mask, token_type_ids = texts
-        image, labels, category, sents = others
-        input_ids, attention_mask, token_type_ids, image, labels, category = \
+        image, image_aug, labels, category, sents = others
+        input_ids, attention_mask, token_type_ids, image, image_aug, labels, category = \
             to_var(input_ids), to_var(attention_mask), to_var(token_type_ids), \
-            to_var(image), to_var(labels), to_var(category)
+            to_var(image), to_var(image_aug), to_var(labels), to_var(category)
 
         mix_output, image_only_output, text_only_output, vgg_only_output, aux_output, _ , features = model(input_ids=input_ids,
                                                                         attention_mask=attention_mask,
                                                                         token_type_ids=token_type_ids,
                                                                         image=image,
+                                                                        image_aug=image_aug,
                                                                         no_ambiguity=True,
                                                                         category=category,
                                                                        return_features=True)

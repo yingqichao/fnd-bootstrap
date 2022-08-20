@@ -62,7 +62,7 @@ class FakeNet_dataset(data.Dataset):
         # dataset_names = ['gossip','politi']
         # for dataset_name in dataset_names:
         # wb = openpyxl.load_workbook(root_path+'/{}_{}.xlsx'.format(dataset_name, 'train' if is_train else 'test'))
-        workbook_name = self.root_path + '/{}/{}_{}{}.xlsx'.format(self.dataset_name,self.dataset_name, 'train' if is_train else 'test','' if is_filter else '_no_filt')
+        workbook_name = self.root_path + '/{}/{}_{}{}.xlsx'.format(self.dataset_name,self.dataset_name, 'train' if self.is_train else 'test','' if is_filter else '_no_filt')
         wb = openpyxl.load_workbook(workbook_name)
         print(f"Workbook name {workbook_name}")
         sheetnames = wb.sheetnames

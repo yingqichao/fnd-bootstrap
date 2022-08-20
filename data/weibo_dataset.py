@@ -1,3 +1,4 @@
+import copy
 
 import cv2
 
@@ -8,7 +9,7 @@ import data.util as util
 import torchvision.transforms.functional as F
 from torchvision import datasets, transforms
 # datasets.ImageFolder
-
+import albumentations as A
 from PIL import Image
 import os
 import openpyxl
@@ -66,6 +67,7 @@ class weibo_dataset(data.Dataset):
                  not_on_12=0
                  ):
         super(weibo_dataset, self).__init__()
+        self.not_valid_set = set()
         not_on_12 = not_on_12>0
         print(f"not on 12? {not_on_12}")
         self.with_ambiguity = with_ambiguity
@@ -79,19 +81,39 @@ class weibo_dataset(data.Dataset):
         self.index = 0
         self.label_dict = []
         self.image_size = image_size
-        self.transform = transforms.Compose([
-        # transforms.Resize(input_size),
-        # transforms.CenterCrop(input_size),
-        # transforms.RandomAffine(degrees=0, translate=(0.05, 0.05)),
-            transforms.RandomVerticalFlip(),
-            transforms.RandomHorizontalFlip(),
-        # transforms.ToTensor(),
-        # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-
-    ])
+        self.transform_just_resize = A.Compose(
+            [
+                A.Resize(always_apply=True, height=image_size, width=image_size)
+            ]
+        )
+        self.transform = A.Compose(
+            [
+                A.HorizontalFlip(p=0.5),
+                # A.ElasticTransform(p=0.5),
+                A.OneOf(
+                    [
+                        A.CLAHE(always_apply=False, p=0.25),
+                        A.RandomBrightnessContrast(always_apply=False, p=0.25),
+                        A.Equalize(always_apply=False, p=0.25),
+                        A.RGBShift(always_apply=False, p=0.25),
+                    ]
+                ),
+                A.OneOf(
+                    [
+                        A.ImageCompression(always_apply=False, quality_lower=60, quality_upper=100, p=0.2),
+                        A.MedianBlur(always_apply=False, p=0.2),
+                        A.GaussianBlur(always_apply=False, p=0.2),
+                        # A.MotionBlur(always_apply=False, p=0.2),
+                        A.GaussNoise(always_apply=False, p=0.2),
+                        A.ISONoise(always_apply=False, p=0.2)
+                    ]
+                ),
+                A.Resize(always_apply=True,height=image_size, width=image_size)
+            ]
+        )
         if '21' in self.root_path:
             print("We are using Weibo 21.")
-        wb = openpyxl.load_workbook(f"{self.root_path}/{'train' if is_train else 'test'}_datasets{'_Weibo21' if '21' in self.root_path else '_WWW_new'}.xlsx")
+        wb = openpyxl.load_workbook(f"{self.root_path}/{'train' if self.is_train else 'test'}_datasets{'_Weibo21' if '21' in self.root_path else '_WWW_new'}.xlsx")
 
         sheetnames = wb.sheetnames
         sheet = wb[sheetnames[0]]
@@ -173,7 +195,7 @@ class weibo_dataset(data.Dataset):
             if not find_path:
                 print(f"File not found!{GT_path}")
                 index = np.random.randint(0, len(self.label_dict))
-            else:
+            elif not GT_path in self.not_valid_set:
                 img_GT = cv2.imread(GT_path, cv2.IMREAD_COLOR)
                 if img_GT is None:
                     print(f"File cannot open!{GT_path}")
@@ -192,28 +214,28 @@ class weibo_dataset(data.Dataset):
                         find_path = False
                         print("find length not satisfying")
                         index = np.random.randint(0, len(self.label_dict))
-                        # self.not_valid_set.add(GT_path)
+                        self.not_valid_set.add(GT_path)
                     else:
                         find_path = True
-        # if '/' in GT_path:
-        #     # excel中文件名前面可能会有'(non)rumor_images/'，这个在读图的时候是不需要的，直接过滤
-        #     GT_path = GT_path[GT_path.rfind('/')+1:]
-        try:
-            # img_GT = util.read_img(GT_path)
-            img_GT = img_GT.astype(np.float32) / 255.
-            if img_GT.ndim == 2:
-                img_GT = np.expand_dims(img_GT, axis=2)
-            # some images have 4 channels
-            if img_GT.shape[2] > 3:
-                img_GT = img_GT[:, :, :3]
-        except Exception:
-            raise IOError("Load {} Error {}".format(GT_path, record['images']))
+                        if img_GT.ndim == 2:
+                            img_GT = np.expand_dims(img_GT, axis=2)
+                        # some images have 4 channels
+                        if img_GT.shape[2] > 3:
+                            img_GT = img_GT[:, :, :3]
 
-        img_GT = util.channel_convert(img_GT.shape[2], 'RGB', [img_GT])[0]
+                        img_GT = util.channel_convert(img_GT.shape[2], 'RGB', [img_GT])[0]
+
+        if not self.is_train:
+            img_GT_augment = self.transform_just_resize(image=copy.deepcopy(img_GT))["image"]
+        else:
+            img_GT_augment = self.transform(image=copy.deepcopy(img_GT))["image"]
+        img_GT = self.transform_just_resize(image=copy.deepcopy(img_GT))["image"]
+        img_GT = img_GT.astype(np.float32) / 255.
+        img_GT_augment = img_GT_augment.astype(np.float32) / 255.
 
         ###### directly resize instead of crop
-        img_GT = cv2.resize(np.copy(img_GT), (GT_size, GT_size),
-                            interpolation=cv2.INTER_LINEAR)
+        # img_GT = cv2.resize(np.copy(img_GT), (GT_size, GT_size),
+        #                     interpolation=cv2.INTER_LINEAR)
 
         orig_height, orig_width, _ = img_GT.shape
         H, W, _ = img_GT.shape
@@ -221,9 +243,11 @@ class weibo_dataset(data.Dataset):
         # BGR to RGB, HWC to CHW, numpy to tensor
         if img_GT.shape[2] == 3:
             img_GT = img_GT[:, :, [2, 1, 0]]
-
+        if img_GT_augment.shape[2] == 3:
+            img_GT_augment = img_GT_augment[:, :, [2, 1, 0]]
 
         img_GT = torch.from_numpy(np.ascontiguousarray(np.transpose(img_GT, (2, 0, 1)))).float()
+        img_GT_augment = torch.from_numpy(np.ascontiguousarray(np.transpose(img_GT_augment, (2, 0, 1)))).float()
 
         # AMBIGUITY: SAME, REPEATED CODE
         if self.with_ambiguity:
@@ -268,9 +292,9 @@ class weibo_dataset(data.Dataset):
                 img_ambiguity = torch.zeros((3, GT_size, GT_size))
 
         if not self.with_ambiguity:
-            return (content, img_GT, label, 0), (GT_path)
+            return (content, img_GT, img_GT_augment, label, 0), (GT_path)
         else:
-            return (content, img_GT, label, 0), (GT_path), (content_ambiguity, img_ambiguity, label_ambiguity)
+            return (content, img_GT, img_GT_augment, label, 0), (GT_path), (content_ambiguity, img_ambiguity, label_ambiguity)
 
         # 如果用smooth label来训练网络， 则上面的label应该改成 torch.tensor(label,dtype=torch.float32)
 
