@@ -72,8 +72,9 @@ class TokenAttention(torch.nn.Module):
         super(TokenAttention, self).__init__()
         self.attention_layer = nn.Sequential(
                             torch.nn.Linear(input_shape, input_shape),
-                            SimpleGate(dim=2),
-                            torch.nn.Linear(int(input_shape/2), 1),
+                            nn.SiLU(),
+                            #SimpleGate(dim=2),
+                            torch.nn.Linear(input_shape, 1),
         )
 
     def forward(self, inputs):
@@ -184,9 +185,10 @@ class UAMFD_Net(nn.Module):
         self.mm_experts = nn.ModuleList(mm_expert_list)
         # self.out_unified_dim = 320
         self.image_gate_mae = nn.Sequential(nn.Linear(self.unified_dim, self.unified_dim),
-                                            SimpleGate(),
-                                            nn.BatchNorm1d(int(self.unified_dim/2)),
-                                            nn.Linear(int(self.unified_dim/2), self.num_expert),
+                                            nn.SiLU(),
+                                            # SimpleGate(),
+                                            # nn.BatchNorm1d(int(self.unified_dim/2)),
+                                            nn.Linear(self.unified_dim, self.num_expert),
                                             # nn.Dropout(0.1),
                                             # nn.Softmax(dim=1)
                                             )
@@ -199,16 +201,18 @@ class UAMFD_Net(nn.Module):
         #                                 )
 
         self.text_gate = nn.Sequential(nn.Linear(self.unified_dim, self.unified_dim),
-                                       SimpleGate(),
-                                       nn.BatchNorm1d(int(self.unified_dim/2)),
-                                       nn.Linear(int(self.unified_dim/2), self.num_expert),
+                                       nn.SiLU(),
+                                       # SimpleGate(),
+                                       # nn.BatchNorm1d(int(self.unified_dim/2)),
+                                       nn.Linear(self.unified_dim, self.num_expert),
                                        # nn.Dropout(0.1),
                                        # nn.Softmax(dim=1)
                                        )
         self.mm_gate = nn.Sequential(nn.Linear(self.unified_dim, self.unified_dim),
-                                     SimpleGate(),
-                                     nn.BatchNorm1d(int(self.unified_dim/2)),
-                                     nn.Linear(int(self.unified_dim/2), self.num_expert),
+                                     nn.SiLU(),
+                                     # SimpleGate(),
+                                     # nn.BatchNorm1d(int(self.unified_dim/2)),
+                                     nn.Linear(self.unified_dim, self.num_expert),
                                      # nn.Dropout(0.1),
                                      # nn.Softmax(dim=1)
                                      )
@@ -261,9 +265,10 @@ class UAMFD_Net(nn.Module):
         #                                               # nn.Dropout(0.2),
         #                                               )
         self.fusion_SE_network_main_task = nn.Sequential(nn.Linear(self.unified_dim, self.unified_dim),
-                                                         SimpleGate(),
-                                                         nn.BatchNorm1d(int(self.unified_dim/2)),
-                                                         nn.Linear(int(self.unified_dim/2), self.num_expert),
+                                                         nn.SiLU(),
+                                                         # SimpleGate(),
+                                                         # nn.BatchNorm1d(int(self.unified_dim/2)),
+                                                         nn.Linear(self.unified_dim, self.num_expert),
                                                          # nn.Softmax(dim=1)
                                                          )
         ## AUXILIARY TASK GATES
@@ -313,9 +318,10 @@ class UAMFD_Net(nn.Module):
 
         # CLASSIFICATION HEAD
         self.mix_trim = nn.Sequential(
-            nn.Linear(self.unified_dim, 128),
-            SimpleGate(),
-            nn.BatchNorm1d(64),
+            nn.Linear(self.unified_dim, 64),
+            nn.SiLU(),
+            # SimpleGate(),
+            # nn.BatchNorm1d(64),
             # nn.Dropout(0.2),
         )
         self.mix_classifier = nn.Sequential(
@@ -323,9 +329,10 @@ class UAMFD_Net(nn.Module):
         )
 
         self.text_trim = nn.Sequential(
-            nn.Linear(self.unified_dim, 128),
-            SimpleGate(),
-            nn.BatchNorm1d(64),
+            nn.Linear(self.unified_dim, 64),
+            nn.SiLU(),
+            # SimpleGate(),
+            # nn.BatchNorm1d(64),
             # nn.Dropout(0.2),
         )
         self.text_alone_classifier = nn.Sequential(
@@ -333,9 +340,10 @@ class UAMFD_Net(nn.Module):
         )
 
         self.image_trim = nn.Sequential(
-            nn.Linear(self.unified_dim, 128),
-            SimpleGate(),
-            nn.BatchNorm1d(64),
+            nn.Linear(self.unified_dim, 64),
+            nn.SiLU(),
+            # SimpleGate(),
+            # nn.BatchNorm1d(64),
             # nn.Dropout(0.2),
         )
         self.image_alone_classifier = nn.Sequential(
@@ -343,9 +351,10 @@ class UAMFD_Net(nn.Module):
         )
 
         self.vgg_trim = nn.Sequential(
-            nn.Linear(self.unified_dim, 128),
-            SimpleGate(),
-            nn.BatchNorm1d(64),
+            nn.Linear(self.unified_dim, 64),
+            nn.SiLU(),
+            # SimpleGate(),
+            # nn.BatchNorm1d(64),
             # nn.Dropout(0.2),
         )
         self.vgg_alone_classifier = nn.Sequential(
@@ -353,9 +362,10 @@ class UAMFD_Net(nn.Module):
         )
 
         self.aux_trim = nn.Sequential(
-            nn.Linear(self.unified_dim, 128),
-            SimpleGate(),
-            nn.BatchNorm1d(64),
+            nn.Linear(self.unified_dim, 64),
+            nn.SiLU(),
+            # SimpleGate(),
+            # nn.BatchNorm1d(64),
             # nn.Dropout(0.2),
         )
         self.aux_classifier = nn.Sequential(

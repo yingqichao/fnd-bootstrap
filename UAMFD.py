@@ -561,7 +561,7 @@ def main(args):
                     loss_CE_text = criterion(text_only_output, labels)
                     loss_CE_vgg = criterion(vgg_only_output, labels)
                     loss_single_modal = (loss_CE_vgg+loss_CE_text+loss_CE_image)/3
-                    loss = loss_CE+4.0*loss_ambiguity+1.0*loss_single_modal
+                    loss = loss_CE+2.0*loss_ambiguity+1.0*loss_single_modal
                     # if use_scalar:
                     #     writer.add_scalar('loss_CE', loss_CE.item(), global_step=global_step)
                     #     writer.add_scalar('loss_CE_image', loss_CE_image.item(), global_step=global_step)

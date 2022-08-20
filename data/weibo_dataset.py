@@ -75,7 +75,7 @@ class weibo_dataset(data.Dataset):
         print("Using AMBIGUITY LEARNING: {}".format(self.with_ambiguity))
         self.root_path = root_path if not not_on_12 else root_path[5:]
         self.root_path_ambiguity = '/home/groupshare/weibo' if not not_on_12 else '/groupshare/weibo'
-        self.ambiguity_excel = '/home/groupshare/weibo/weibo_train_ambiguity.xlsx' if not not_on_12 else '/groupshare/weibo/weibo_train_ambiguity.xlsx'
+        self.ambiguity_excel = '/home/groupshare/weibo/weibo_train_ambiguity_new.xlsx' if not not_on_12 else '/groupshare/weibo/weibo_train_ambiguity_new.xlsx'
         self.index = 0
         self.label_dict = []
         self.image_size = image_size
@@ -91,7 +91,7 @@ class weibo_dataset(data.Dataset):
     ])
         if '21' in self.root_path:
             print("We are using Weibo 21.")
-        wb = openpyxl.load_workbook(f"{self.root_path}/{'train' if is_train else 'test'}_datasets{'_Weibo21' if '21' in self.root_path else '_WWW'}.xlsx")
+        wb = openpyxl.load_workbook(f"{self.root_path}/{'train' if is_train else 'test'}_datasets{'_Weibo21' if '21' in self.root_path else '_WWW_new'}.xlsx")
 
         sheetnames = wb.sheetnames
         sheet = wb[sheetnames[0]]
@@ -181,13 +181,13 @@ class weibo_dataset(data.Dataset):
                 else:
                     H_origin, W_origin, _ = img_GT.shape
                     if H_origin < 100 or W_origin < 100 or H_origin / W_origin < 0.33 or H_origin / W_origin > 3:  # 'text' in category:
-                        # print(f"Unimodal text detected {H_origin} {W_origin}. Set as zero matrix")
+                        print(f"Unimodal text detected {H_origin} {W_origin}. Set as zero matrix")
                         find_path = False
                         index = np.random.randint(0, len(self.label_dict))
                         # self.not_valid_set.add(GT_path)
                         # img_GT = torch.zeros_like(img_GT)
-                    elif len(content)<5:
-                        # print("Unimodal image detected. Set as \"No image provided for this news\"")
+                    elif len(content)<10:
+                        print("Unimodal image detected. Set as \"No image provided for this news\"")
                         # content = "No image provided for this news"
                         find_path = False
                         print("find length not satisfying")

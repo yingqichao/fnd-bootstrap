@@ -210,7 +210,7 @@ class FakeNet_dataset(data.Dataset):
                             find_path = False
                             # self.not_valid_set.add(GT_path)
                             # img_GT = torch.zeros_like(img_GT)
-                        elif 'image' in category:
+                        elif len(content)<10: #'image' in category:
                             # print("Unimodal image detected. Set as \"No image provided for this news\"")
                             # content = "No image provided for this news"
                             find_path = False

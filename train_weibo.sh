@@ -7,5 +7,6 @@ CUDA_VISIBLE_DEVICES=0 python ./UAMFD.py -train_dataset weibo \
                                         -duplicate_fake_times 0 \
                                         -network_arch UAMFDv2 \
                                         -is_filter 0 \
+                                        -checkpoint /groupshare/CIKM_ying_output//weibo/1_820_89.pkl \
                                         -not_on_12 1
 #-checkpoint /groupshare/CIKM_ying_output//weibo/18_812_91.pkl \

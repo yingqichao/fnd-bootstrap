@@ -2,7 +2,7 @@ CUDA_VISIBLE_DEVICES=0 python ./UAMFD.py -train_dataset weibo \
                                         -test_dataset weibo \
                                         -batch_size 24 \
                                         -epochs 50 \
-                                        -checkpoint /groupshare/CIKM_ying_output//weibo/46_810_91.pkl \
+                                        -checkpoint /groupshare/CIKM_ying_output//weibo/12_819_90.pkl \
                                         -network_arch UAMFDv2 \
                                         -val 1 \
                                         -get_MLP_score 0 \
