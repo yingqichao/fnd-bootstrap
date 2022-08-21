@@ -62,7 +62,7 @@ import random
 class weibo_dataset(data.Dataset):
 
     def __init__(self,
-                 root_path='/home/groupshare/weibo', image_size=224, is_train=True,
+                 dataset='Weibo_21', image_size=224, is_train=True,
                  with_ambiguity=False,use_soft_label=False, is_use_unimodal=False,
                  not_on_12=0
                  ):
@@ -75,9 +75,14 @@ class weibo_dataset(data.Dataset):
         self.label_ambiguity = []
         self.is_train = is_train
         print("Using AMBIGUITY LEARNING: {}".format(self.with_ambiguity))
+        self.dataset = dataset
+        root_path = '/home/groupshare/'+self.dataset
         self.root_path = root_path if not not_on_12 else root_path[5:]
-        self.root_path_ambiguity = '/home/groupshare/weibo' if not not_on_12 else '/groupshare/weibo'
-        self.ambiguity_excel = '/home/groupshare/weibo/weibo_train_ambiguity_new.xlsx' if not not_on_12 else '/groupshare/weibo/weibo_train_ambiguity_new.xlsx'
+        if '21' in self.root_path:
+            print("We are using Weibo 21.")
+        self.root_path_ambiguity = root_path #'/home/groupshare/weibo' if '21' not in self.root_path else '/home/groupshare/Weibo_21'
+        self.root_path_ambiguity = root_path if not not_on_12 else root_path[5:]
+        self.ambiguity_excel = f'{self.root_path_ambiguity}/{self.dataset}_train_ambiguity_new.xlsx'
         self.index = 0
         self.label_dict = []
         self.image_size = image_size
@@ -111,8 +116,7 @@ class weibo_dataset(data.Dataset):
                 A.Resize(always_apply=True,height=image_size, width=image_size)
             ]
         )
-        if '21' in self.root_path:
-            print("We are using Weibo 21.")
+
         wb = openpyxl.load_workbook(f"{self.root_path}/{'train' if self.is_train else 'test'}_datasets{'_Weibo21' if '21' in self.root_path else '_WWW_new'}.xlsx")
 
         sheetnames = wb.sheetnames
