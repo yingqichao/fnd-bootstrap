@@ -439,7 +439,7 @@ def main(args):
                 # print(f"optim fast: {k}")
                 name_params_normal.append(k)
                 optim_params_normal.append(v)
-            elif "vgg_net" in k:
+            elif "vgg_net" in k or "irrelevant" in k:
                 name_params_extremefast.append(k)
                 optim_params_extremefast.append(v)
             else:
@@ -459,7 +459,7 @@ def main(args):
                                        lr=1e-4 if not fine_tuning else 1e-5, betas=(0.9, 0.999), weight_decay=0.01)
     # scheduler = ReduceLROnPlateau(optimizer,'min',factor=0.5,patience=3)
     # scheduler = MultiStepLR(optimizer,milestones=[10,20,30,40],gamma=0.5)
-    num_steps = int(len(train_loader) * custom_num_epochs * 1.2)
+    num_steps = int(len(train_loader) * custom_num_epochs * 1.1)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_steps)
     warmup_scheduler = warmup.UntunedLinearWarmup(optimizer)
     scheduler_fast = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_fast, T_max=num_steps)
@@ -566,7 +566,7 @@ def main(args):
                     loss_CE_text = criterion(text_only_output, labels)
                     loss_CE_vgg = criterion(vgg_only_output, labels)
                     loss_single_modal = (loss_CE_vgg+loss_CE_text+loss_CE_image)/3
-                    loss = loss_CE+1.0*loss_ambiguity+1.0*loss_single_modal
+                    loss = loss_CE+2.0*loss_ambiguity+1.0*loss_single_modal
                     # if use_scalar:
                     #     writer.add_scalar('loss_CE', loss_CE.item(), global_step=global_step)
                     #     writer.add_scalar('loss_CE_image', loss_CE_image.item(), global_step=global_step)
@@ -581,7 +581,7 @@ def main(args):
                     loss.backward()
                     # scaler.scale(loss).backward()
                     nn.utils.clip_grad_norm_(model.parameters(), max_norm=1)
-                    if epoch>5:
+                    if epoch>=10:
                         # fine-tune MAE and BERT from the 5th epoch
                         optimizer.step()
                         # scaler.step(optimizer)

@@ -225,21 +225,23 @@ class UAMFD_Net(nn.Module):
                                      # nn.Softmax(dim=1)
                                      )
 
-        # self.image_gate_mae_1 = nn.Sequential(nn.Linear(self.unified_dim, self.unified_dim),
-        #                                       SimpleGate(),
-        #                                       nn.BatchNorm1d(int(self.unified_dim/2)),
-        #                                       nn.Linear(int(self.unified_dim/2), self.num_expert),
-        #                                       # nn.Dropout(0.1),
-        #                                       # nn.Softmax(dim=1)
-        #                                       )
+        self.image_gate_mae_1 = nn.Sequential(nn.Linear(self.unified_dim, self.unified_dim),
+                                              nn.SiLU(),
+                                              # SimpleGate(),
+                                              # nn.BatchNorm1d(int(self.unified_dim/2)),
+                                              nn.Linear(self.unified_dim, self.num_expert),
+                                              # nn.Dropout(0.1),
+                                              # nn.Softmax(dim=1)
+                                              )
 
-        # self.text_gate_1 = nn.Sequential(nn.Linear(self.unified_dim, self.unified_dim),
-        #                                  SimpleGate(),
-        #                                  nn.BatchNorm1d(int(self.unified_dim/2)),
-        #                                  nn.Linear(int(self.unified_dim/2), self.num_expert),
-        #                                  # nn.Dropout(0.1),
-        #                                  # nn.Softmax(dim=1)
-        #                                  )
+        self.text_gate_1 = nn.Sequential(nn.Linear(self.unified_dim, self.unified_dim),
+                                         nn.SiLU(),
+                                         # SimpleGate(),
+                                         # nn.BatchNorm1d(int(self.unified_dim/2)),
+                                         nn.Linear(self.unified_dim, self.num_expert),
+                                         # nn.Dropout(0.1),
+                                         # nn.Softmax(dim=1)
+                                         )
 
         ## MAIN TASK GATES
         self.final_attention = TokenAttention(self.unified_dim)
@@ -527,7 +529,6 @@ class UAMFD_Net(nn.Module):
         # IMAGE EXPERTS
         # NOTE: IMAGE/TEXT/MM EXPERTS WILL BE MLPS IF WE USE WWW LOADER
         shared_image_feature, shared_image_feature_1 = 0, 0
-        # shared_image_feature += (vgg_feature * gate_image_feature_vgg[:, -1].unsqueeze(1))
         for i in range(self.num_expert):
             image_expert = self.image_experts[i]
             tmp_image_feature = image_feature
@@ -536,6 +537,7 @@ class UAMFD_Net(nn.Module):
             shared_image_feature += (tmp_image_feature * gate_image_feature[:, i].unsqueeze(1).unsqueeze(1))
             # shared_image_feature_1 += (tmp_image_feature * gate_image_feature_1[:, i].unsqueeze(1).unsqueeze(1))
         shared_image_feature = shared_image_feature[:, 0]
+        # shared_image_feature_1 = shared_image_feature_1[:, 0]
 
         ## TEXT AND MM EXPERTS
         shared_text_feature, shared_text_feature_1 = 0, 0
@@ -547,8 +549,10 @@ class UAMFD_Net(nn.Module):
             shared_text_feature += (tmp_text_feature * gate_text_feature[:, i].unsqueeze(1).unsqueeze(1))
             # shared_text_feature_1 += (tmp_text_feature * gate_text_feature_1[:, i].unsqueeze(1).unsqueeze(1))
         shared_text_feature = shared_text_feature[:, 0]
+        # shared_text_feature_1 = shared_text_feature_1[:, 0]
 
         mm_feature = torch.cat((image_feature, text_feature), dim=1)
+        # mm_feature = torch.cat((shared_image_feature_1, shared_text_feature_1), dim=1)
         shared_mm_feature, shared_mm_feature_CC = 0, 0
         for i in range(self.num_expert):
             mm_expert = self.mm_experts[i]

@@ -33,21 +33,22 @@ class GoogLeNet(nn.Module):
             self.bayar_final = (torch.tensor(np.zeros((5, 5)))).cuda()
             self.bayar_final[2, 2] = -1
 
-            ## srm conv
-            self.SRMConv2D = nn.Conv2d(3, 9, 5, 1, padding=2, bias=False)
-            self.SRMConv2D.weight.data = torch.load('MantraNetv4.pt')['SRMConv2D.weight']
+            # ## srm conv
+            # self.SRMConv2D = nn.Conv2d(3, 9, 5, 1, padding=2, bias=False)
+            # self.SRMConv2D.weight.data = torch.load('MantraNetv4.pt')['SRMConv2D.weight']
+            #
+            # ##SRM filters (fixed)
+            # for param in self.SRMConv2D.parameters():
+            #     param.requires_grad = False
 
-            ##SRM filters (fixed)
-            for param in self.SRMConv2D.parameters():
-                param.requires_grad = False
-
-            self.relu = nn.ELU(inplace=True)
-            image_channels = 12
+            # self.relu = nn.SiLU() #nn.ELU(inplace=True)
+            # image_channels = 12
 
 
         self.conv1 = conv_block(
             in_channels=image_channels,
             out_channels=64,
+            xbn=False,
             kernel_size=(7, 7),
             stride=(2, 2),
             padding=(3, 3),
@@ -106,10 +107,10 @@ class GoogLeNet(nn.Module):
             self.BayarConv2D.weight.data *= torch.pow(self.BayarConv2D.weight.data.sum(axis=(2, 3)).view(3, 3, 1, 1),-1)
             self.BayarConv2D.weight.data += self.bayar_final
             conv_bayar = self.BayarConv2D(x)
-            conv_srm = self.SRMConv2D(x)
+            # conv_srm = self.SRMConv2D(x)
 
-            x = torch.cat((conv_srm, conv_bayar), dim=1)
-            x = self.relu(x)
+            x = conv_bayar #torch.cat((conv_srm, conv_bayar), dim=1)
+            # x = self.relu(x)
 
         x = self.conv1(x)
         x = self.maxpool1(x)
@@ -158,12 +159,12 @@ class Inception_block(nn.Module):
         self.branch1 = conv_block(in_channels, out_1x1, kernel_size=(1, 1))
 
         self.branch2 = nn.Sequential(
-            conv_block(in_channels, red_3x3, kernel_size=(1, 1)),
+            conv_block(in_channels, red_3x3, xbn=False, kernel_size=(1, 1)),
             conv_block(red_3x3, out_3x3, kernel_size=(3, 3), padding=(1, 1)),
         )
 
         self.branch3 = nn.Sequential(
-            conv_block(in_channels, red_5x5, kernel_size=(1, 1)),
+            conv_block(in_channels, red_5x5, xbn=False, kernel_size=(1, 1)),
             conv_block(red_5x5, out_5x5, kernel_size=(5, 5), padding=(2, 2)),
         )
 
@@ -198,16 +199,37 @@ class InceptionAux(nn.Module):
 
         return x
 
+class SimpleGate(nn.Module):
+    def __init__(self, dim=1):
+        super(SimpleGate, self).__init__()
+        self.dim=dim
+
+    def forward(self,x):
+        x1,x2 = x.chunk(2,dim=self.dim)
+        return x1*x2
+
 
 class conv_block(nn.Module):
-    def __init__(self, in_channels, out_channels, **kwargs):
+    def __init__(self, in_channels, out_channels, xbn=False, **kwargs):
         super(conv_block, self).__init__()
-        self.relu = nn.ReLU()
+        # print(f"Using group norm: {xbn}")
+        self.relu = nn.SiLU() #SimpleGate() #nn.ReLU() nn.SiLU(),
         self.conv = nn.Conv2d(in_channels, out_channels, **kwargs)
-        self.batchnorm = nn.BatchNorm2d(out_channels)
+        self.batchnorm = nn.BatchNorm2d(out_channels) if not xbn else nn.GroupNorm(num_channels=out_channels,num_groups=16)
+        # self.sca = nn.Sequential(
+        #     nn.AdaptiveAvgPool2d(1),
+        #     nn.Conv2d(in_channels=out_channels, out_channels=out_channels,kernel_size=1,padding=0,stride=1,
+        #               groups=1,bias=True,
+        #     ),
+        # )
 
     def forward(self, x):
-        return self.relu(self.batchnorm(self.conv(x)))
+        x = self.conv(x)
+        x = self.relu(x)
+        # x = x*self.sca(x)
+        x = self.batchnorm(x)
+        return x
+        # return self.relu(self.batchnorm(self.conv(x)))
 
 
 if __name__ == "__main__":

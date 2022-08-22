@@ -62,7 +62,7 @@ import random
 class weibo_dataset(data.Dataset):
 
     def __init__(self,
-                 dataset='Weibo_21', image_size=224, is_train=True,
+                 dataset='weibo', image_size=224, is_train=True,
                  with_ambiguity=False,use_soft_label=False, is_use_unimodal=False,
                  not_on_12=0
                  ):
@@ -192,42 +192,42 @@ class weibo_dataset(data.Dataset):
             record = self.label_dict[index]
             images, label, content = record['images'], record['label'], record['content']
             imgs = images.split('|')
-            GT_path = imgs[np.random.randint(0, len(imgs))]
+            for index_image in random.sample(range(len(imgs)),len(imgs)):
+                GT_path = imgs[index_image]
 
-            GT_path = "{}/{}".format(self.root_path, GT_path)
-            find_path = os.path.exists(GT_path)
-            if not find_path:
-                print(f"File not found!{GT_path}")
-                index = np.random.randint(0, len(self.label_dict))
-            elif not GT_path in self.not_valid_set:
-                img_GT = cv2.imread(GT_path, cv2.IMREAD_COLOR)
-                if img_GT is None:
-                    print(f"File cannot open!{GT_path}")
-                    index = np.random.randint(0, len(self.label_dict))
-                else:
-                    H_origin, W_origin, _ = img_GT.shape
-                    if H_origin < 100 or W_origin < 100 or H_origin / W_origin < 0.33 or H_origin / W_origin > 3:  # 'text' in category:
-                        print(f"Unimodal text detected {H_origin} {W_origin}. Set as zero matrix")
+                GT_path = "{}/{}".format(self.root_path, GT_path)
+                find_path = os.path.exists(GT_path)
+                if not find_path:
+                    print(f"File not found!{GT_path}")
+                elif not GT_path in self.not_valid_set:
+                    img_GT = cv2.imread(GT_path, cv2.IMREAD_COLOR)
+                    if img_GT is None:
+                        print(f"File cannot open!{GT_path}")
                         find_path = False
-                        index = np.random.randint(0, len(self.label_dict))
-                        # self.not_valid_set.add(GT_path)
-                        # img_GT = torch.zeros_like(img_GT)
-                    elif len(content)<10:
-                        print("Unimodal image detected. Set as \"No image provided for this news\"")
-                        # content = "No image provided for this news"
-                        find_path = False
-                        print("find length not satisfying")
-                        index = np.random.randint(0, len(self.label_dict))
-                        self.not_valid_set.add(GT_path)
                     else:
-                        find_path = True
-                        if img_GT.ndim == 2:
-                            img_GT = np.expand_dims(img_GT, axis=2)
-                        # some images have 4 channels
-                        if img_GT.shape[2] > 3:
-                            img_GT = img_GT[:, :, :3]
+                        H_origin, W_origin, _ = img_GT.shape
+                        if H_origin < 100 or W_origin < 100 or H_origin / W_origin < 0.33 or H_origin / W_origin > 3:  # 'text' in category:
+                            # print(f"Unimodal text detected {H_origin} {W_origin}. Skip.")
+                            find_path = False
+                            # self.not_valid_set.add(GT_path)
+                            # img_GT = torch.zeros_like(img_GT)
+                        elif len(content)<10:
+                            print("Find length not satisfying")
+                            # content = "No image provided for this news"
+                            find_path = False
+                            self.not_valid_set.add(GT_path)
+                            break
+                        else:
+                            find_path = True
+                            if img_GT.ndim == 2:
+                                img_GT = np.expand_dims(img_GT, axis=2)
+                            # some images have 4 channels
+                            if img_GT.shape[2] > 3:
+                                img_GT = img_GT[:, :, :3]
 
-                        img_GT = util.channel_convert(img_GT.shape[2], 'RGB', [img_GT])[0]
+                            img_GT = util.channel_convert(img_GT.shape[2], 'RGB', [img_GT])[0]
+                            break
+            index = np.random.randint(0, len(self.label_dict))
 
         if not self.is_train:
             img_GT_augment = self.transform_just_resize(image=copy.deepcopy(img_GT))["image"]
