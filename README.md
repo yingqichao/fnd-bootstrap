@@ -2,7 +2,7 @@
 
 This repo is built upon ["Masked Autoencoders: A PyTorch Implementation"](https://github.com/facebookresearch/mae)
 
-* Data Preparation. You need to prepare the data using the scripts in ./data_prepare. We only support Weibo/Weibo-21/GossipCop so far, and the data should be downloaded exactly from the following sources. Weibo/Weibo-21: send email to Dr [Qiong Nan](nanqiong19z<nanqiong19z@ict.ac.cn). GossipCop: send email to [Shivangi Singhal](shivangis@iiitd.ac.in). They will kindly help (according to our experience)
+* Data Preparation. You need to prepare the data using the scripts in ./data_prepare. We only support Weibo/Weibo-21/GossipCop so far, and the data should be downloaded exactly from the following sources. Weibo/Weibo-21: send email to Dr [Qiong Nan](nanqiong19z<nanqiong19z@ict.ac.cn). GossipCop: send email to the original authors of GossipCop (say sorry to Dr Singhal for my previous wrong direction and the caused confusion and borthering). They will kindly help (according to our experience)
 
 * After you process the data, run the .sh scripts for training or testing.
 
