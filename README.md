@@ -1,5 +1,7 @@
 ## Bootstrapping Your Own Representations for Fake News Detection
 
+https://www.hackerrank.com/codepair/jsrzvkgxyekhitysnbwqstghnmdfwhbg/questions/1?b=eyJ[…]iNyIsImNhbmRpZGF0ZV91cmwiOiJodHRwczovL2hyLmdzL2MxZmI0M2UifQ
+
 If you like this repo, don't forget to give a star, and if possible cite my AAAI 2023 paper. Many thanks!
 
 This repo is built upon ["Masked Autoencoders: A PyTorch Implementation"](https://github.com/facebookresearch/mae)
